@@ -1,0 +1,82 @@
+package com.scb.channels.research.repository;
+
+
+import com.datastax.driver.core.Row;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.scb.channels.persistence.*;
+import com.scb.channels.research.model.clientform.VisualCaptcha;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+
+import static com.scb.channels.foundation.util.DateUtils.toTimestamp;
+import static com.scb.channels.persistence.PersistableColumn.column;
+import static com.scb.channels.persistence.UnmarshallingStrategy.optionalSingleResult;
+
+@Component
+public class PreConsentRepositoryImpl extends AbstractRepository implements PreConsentRepository {
+
+    @Autowired
+    private PersistenceService persistenceService;
+
+    private static final String TABLE_RP_CAPTCHA = "rp_captcha";
+    private static final String COLUMN_VISUAL_ANSWER = "visualAnswer";
+    private static final String COLUMN_CREATED_AT = "createdAt";
+
+    @Override
+    PersistenceService persistenceService() {
+        return persistenceService;
+    }
+
+    @Override
+    public VisualCaptcha loadCaptchaByVisual(String visualAnswer) {
+        return persistenceService.retrieve(
+                Loadables.<VisualCaptcha>builder()
+                        .targetTable(TABLE_RP_CAPTCHA)
+                        .keyValues(ImmutableMap.of(
+                                COLUMN_VISUAL_ANSWER, visualAnswer
+                        ))
+                        .unmarshallingStrategy(
+                                resultSet -> optionalSingleResult(resultSet)
+                                        .map(this::resourceFromRows).orElse(null))
+                        .build());
+    }
+
+    private PersistableBatchBuilder persistableBatchBuilder() {
+        return newBatch();
+    }
+
+    @Override
+    public void persistCaptcha(VisualCaptcha visualCaptcha) {
+        persistableBatchBuilder().add(persistableFor(visualCaptcha)).execute();
+    }
+
+
+    private Persistable<VisualCaptcha> persistableFor(VisualCaptcha clientSignUpForm) {
+        return Persistables.<VisualCaptcha>builder()
+                .object(clientSignUpForm)
+                .targetTable(TABLE_RP_CAPTCHA)
+                .type(Persistable.Type.Upsert)
+                .keyDefinition(KeyDefinitions.singleton(COLUMN_VISUAL_ANSWER, COLUMN_VISUAL_ANSWER))
+                .marshallingStrategy(userMarshallingStrategy())
+                .build();
+    }
+
+    private MarshallingStrategy<VisualCaptcha> userMarshallingStrategy() {
+        return visualCaptcha -> {
+            return ImmutableList
+                    .<PersistableColumn>builder()
+                    .add(column(COLUMN_VISUAL_ANSWER, visualCaptcha.getVisualAnswer()))
+                    .add(column(COLUMN_CREATED_AT, toTimestamp(Instant.now())))
+                    .build();
+        };
+    }
+
+    private VisualCaptcha resourceFromRows(Row row) {
+        return VisualCaptcha.builder()
+                .visualAnswer(row.getString(COLUMN_VISUAL_ANSWER))
+                .createdAt(row.getTimestamp(COLUMN_CREATED_AT).toInstant()).build();
+    }
+}
