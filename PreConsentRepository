@@ -1,0 +1,11 @@
+package com.scb.channels.research.repository;
+
+
+import com.scb.channels.research.model.clientform.VisualCaptcha;
+
+public interface PreConsentRepository extends Repository {
+
+    public VisualCaptcha loadCaptchaByVisual(String visualAnswer);
+
+    public void persistCaptcha(VisualCaptcha visualCaptcha);
+}
