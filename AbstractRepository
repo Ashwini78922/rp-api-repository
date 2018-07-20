@@ -1,0 +1,15 @@
+package com.scb.channels.research.repository;
+
+import com.scb.channels.persistence.PersistableBatchBuilder;
+import com.scb.channels.persistence.Persistables;
+import com.scb.channels.persistence.PersistenceService;
+
+public abstract class AbstractRepository implements Repository {
+    @Override
+    public PersistableBatchBuilder newBatch() {
+        return Persistables.batchBuilder(persistenceService());
+    }
+
+    abstract PersistenceService persistenceService();
+
+}
