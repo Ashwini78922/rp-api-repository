@@ -1,0 +1,107 @@
+package com.scb.channels.research.repository;
+
+
+import com.datastax.driver.core.Row;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.scb.channels.foundation.util.jackson.Marshaller;
+import com.scb.channels.persistence.*;
+import com.scb.channels.research.resource.model.NotificationInfo;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.CharEncoding;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import javax.xml.bind.DatatypeConverter;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.time.Instant;
+
+import static com.scb.channels.foundation.util.DateUtils.toTimestamp;
+import static com.scb.channels.persistence.PersistableColumn.column;
+import static com.scb.channels.persistence.UnmarshallingStrategy.optionalSingleResult;
+
+@Component
+public class NotificationRepositoryImpl extends AbstractRepository implements NotificationRepository {
+
+    public static final String TABLE_RP_NOTIFICATIONS_BY_REPORT_ID = "rp_notifications_by_report_id";
+    public static final String COLUMN_REPORT_ID = "reportId";
+    public static final String COLUMN_CREATED_AT = "createdAt";
+    public static final String COLUMN_CONTENT = "content";
+
+
+    @Autowired
+    private PersistenceService persistenceService;
+
+    @Autowired
+    private Marshaller marshaller;
+
+
+    @Override
+    PersistenceService persistenceService() {
+        return persistenceService;
+    }
+
+    @Override
+    public PersistableBatchBuilder saveBatched(PersistableBatchBuilder builder, NotificationInfo notificationInfo) {
+        return builder.add(persistableFor(notificationInfo));
+    }
+
+    @Override
+    public NotificationInfo loadNotificationByReportId(String reportId) {
+        return persistenceService.retrieve(
+                Loadables.<NotificationInfo>builder()
+                        .targetTable(TABLE_RP_NOTIFICATIONS_BY_REPORT_ID)
+                        .keyValues(ImmutableMap.of(
+                                COLUMN_REPORT_ID, reportId
+                        ))
+                        .unmarshallingStrategy(
+                                resultSet -> optionalSingleResult(resultSet)
+                                        .map(this::resourceFromRows).orElse(null))
+                        .build());
+    }
+
+    private Persistable<NotificationInfo> persistableFor(NotificationInfo notificationInfo) {
+        return Persistables.<NotificationInfo>builder()
+                .object(notificationInfo)
+                .targetTable(TABLE_RP_NOTIFICATIONS_BY_REPORT_ID)
+                .type(Persistable.Type.Upsert)
+                .keyDefinition(KeyDefinitions.singleton(COLUMN_REPORT_ID, COLUMN_REPORT_ID))
+                .marshallingStrategy(userMarshallingStrategy())
+                .build();
+    }
+
+    private MarshallingStrategy<NotificationInfo> userMarshallingStrategy() {
+        return notificationInfo -> {
+            return ImmutableList
+                    .<PersistableColumn>builder()
+                    .add(column(COLUMN_REPORT_ID, notificationInfo.getReportId()))
+                    .add(column(COLUMN_CREATED_AT, toTimestamp(Instant.now())))
+                    .add(column(COLUMN_CONTENT, getByteBuffer(notificationInfo)))
+                    .build();
+        };
+    }
+
+    private ByteBuffer getByteBuffer(NotificationInfo notificationInfo) {
+        try {
+            String content = DatatypeConverter.printBase64Binary(marshaller.marshalLenient(notificationInfo).getBytes());
+            InputStream inputStream = new ByteArrayInputStream(DatatypeConverter.parseBase64Binary(content));
+            return ByteBuffer.wrap(IOUtils.toByteArray(inputStream));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private NotificationInfo resourceFromRows(Row row) {
+        try {
+            byte[] bytes = row.getBytes(COLUMN_CONTENT).array();
+            String content = new String(bytes, CharEncoding.UTF_8);
+            return marshaller.unmarshalLenient(content, NotificationInfo.class);
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
