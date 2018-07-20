@@ -1,0 +1,7 @@
+package com.scb.channels.research.repository;
+
+import com.scb.channels.persistence.PersistableBatchBuilder;
+
+public interface Repository {
+    PersistableBatchBuilder newBatch();
+}
