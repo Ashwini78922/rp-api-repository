@@ -1,0 +1,13 @@
+package com.scb.channels.research.repository;
+
+
+import com.scb.channels.persistence.PersistableBatchBuilder;
+import com.scb.channels.research.resource.model.NotificationInfo;
+
+public interface NotificationRepository extends Repository {
+
+    NotificationInfo loadNotificationByReportId(String reportId);
+
+    PersistableBatchBuilder saveBatched(PersistableBatchBuilder builder, NotificationInfo notificationInfo);
+
+}
